@@ -1,0 +1,164 @@
+-module(testc).
+-behaviour(gen_server).
+
+%% API functions
+-export([start_link/1]).
+
+%% gen_server callbacks
+-export([init/1,
+         handle_call/3,
+         handle_cast/2,
+         handle_info/2,
+         terminate/2,
+         code_change/3]).
+
+-record(state, {mqttc, seq, client_id}).
+
+
+%%%===================================================================
+%%% API functions
+%%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Starts the server
+%%
+%% @spec start_link() -> {ok, Pid} | ignore | {error, Error}
+%% @end
+%%--------------------------------------------------------------------
+start_link([Host, Uid]) ->
+    gen_server:start_link({local, ?MODULE}, ?MODULE, [atom_to_list(Host), atom_to_binary(Uid, utf8)], []).
+
+%%%===================================================================
+%%% gen_server callbacks
+%%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Initializes the server
+%%
+%% @spec init(Args) -> {ok, State} |
+%%                     {ok, State, Timeout} |
+%%                     ignore |
+%%                     {stop, Reason}
+%% @end
+%%--------------------------------------------------------------------
+init([Host, Uid]) ->
+    {ok, C} = emqttc:start_link([{host, Host}, 
+								 {port, 1883},
+								 {client_id, Uid},
+								 {username, <<"test">>},
+								 {password, ""},
+                                 {reconnect, 3},
+                                 {keepalive, 20},
+								 {clean_sess, false},
+                                 {logger, {console, info}}]),
+    %% The pending subscribe
+	Topics = [{<<"hello">>, 1}],
+    emqttc:subscribe(C, Topics),
+    {ok, #state{mqttc = C, seq = 1, client_id=Uid}}.
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Handling call messages
+%%
+%% @spec handle_call(Request, From, State) ->
+%%                                   {reply, Reply, State} |
+%%                                   {reply, Reply, State, Timeout} |
+%%                                   {noreply, State} |
+%%                                   {noreply, State, Timeout} |
+%%                                   {stop, Reason, Reply, State} |
+%%                                   {stop, Reason, State}
+%% @end
+%%--------------------------------------------------------------------
+handle_call(_Request, _From, State) ->
+    Reply = ok,
+    {reply, Reply, State}.
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Handling cast messages
+%%
+%% @spec handle_cast(Msg, State) -> {noreply, State} |
+%%                                  {noreply, State, Timeout} |
+%%                                  {stop, Reason, State}
+%% @end
+%%--------------------------------------------------------------------
+handle_cast(_Msg, State) ->
+    {noreply, State}.
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Handling all non call/cast messages
+%%
+%% @spec handle_info(Info, State) -> {noreply, State} |
+%%                                   {noreply, State, Timeout} |
+%%                                   {stop, Reason, State}
+%% @end
+%%--------------------------------------------------------------------
+handle_info(hello, #state{mqttc = C, seq = I}=State) ->
+	emqttc:publish(C, <<"hello">>, <<"Hello World">>, [{qos, 1}]),
+	do_loop(hello),
+    {noreply, State#state{seq = I+1}};
+
+handle_info(ping, #state{mqttc=C}=State) ->
+	emqttc:ping(C),
+	erlang:send_after(20000, self(), ping),
+	{noreply, State};
+
+
+%% Receive Messages
+handle_info({publish, Topic, Payload}, State) ->
+    io:format("Message from ~s: ~p~n", [Topic, Payload]),
+    {noreply, State};
+
+%% Client connected
+handle_info({mqttc, C, connected}, State = #state{mqttc = C}) ->
+    io:format("Client ~p is connected~n", [C]),
+	self() ! hello,
+	self() ! ping,
+    {noreply, State};
+
+%% Client disconnected
+handle_info({mqttc, C,  disconnected}, State = #state{mqttc = C}) ->
+    io:format("Client ~p is disconnected~n", [C]),
+    {noreply, State};
+
+handle_info(Info, State) ->
+	io:format("Info: ~p", [Info]),
+    {noreply, State}.
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% This function is called by a gen_server when it is about to
+%% terminate. It should be the opposite of Module:init/1 and do any
+%% necessary cleaning up. When it returns, the gen_server terminates
+%% with Reason. The return value is ignored.
+%%
+%% @spec terminate(Reason, State) -> void()
+%% @end
+%%--------------------------------------------------------------------
+terminate(_Reason, _State) ->
+    ok.
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Convert process state when code is changed
+%%
+%% @spec code_change(OldVsn, State, Extra) -> {ok, NewState}
+%% @end
+%%--------------------------------------------------------------------
+code_change(_OldVsn, State, _Extra) ->
+    {ok, State}.
+
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
+do_loop(What) ->
+	erlang:send_after(10000, self(), What).
