@@ -46,16 +46,16 @@ start_link([Host, Uid]) ->
 %%--------------------------------------------------------------------
 init([Host, Uid]) ->
     {ok, C} = emqttc:start_link([{host, Host}, 
-								 {port, 1883},
-								 {client_id, Uid},
-								 {username, <<"test">>},
-								 {password, ""},
+                                 {port, 1883},
+                                 {client_id, Uid},
+                                 {username, <<"test">>},
+                                 {password, ""},
                                  {reconnect, 3},
                                  {keepalive, 20},
-								 {clean_sess, false},
+                                 {clean_sess, false},
                                  {logger, {console, info}}]),
     %% The pending subscribe
-	Topics = [{<<"hello">>, 1}],
+    Topics = [{<<"hello">>, 1}],
     emqttc:subscribe(C, Topics),
     {ok, #state{mqttc = C, seq = 1, client_id=Uid}}.
 
@@ -101,14 +101,14 @@ handle_cast(_Msg, State) ->
 %% @end
 %%--------------------------------------------------------------------
 handle_info(hello, #state{mqttc = C, seq = I}=State) ->
-	emqttc:publish(C, <<"hello">>, <<"Hello World">>, [{qos, 1}]),
-	do_loop(hello),
+    emqttc:publish(C, <<"hello">>, <<"Hello World">>, [{qos, 1}]),
+    do_loop(hello),
     {noreply, State#state{seq = I+1}};
 
 handle_info(ping, #state{mqttc=C}=State) ->
-	emqttc:ping(C),
-	erlang:send_after(20000, self(), ping),
-	{noreply, State};
+    emqttc:ping(C),
+    erlang:send_after(20000, self(), ping),
+    {noreply, State};
 
 
 %% Receive Messages
@@ -119,8 +119,8 @@ handle_info({publish, Topic, Payload}, State) ->
 %% Client connected
 handle_info({mqttc, C, connected}, State = #state{mqttc = C}) ->
     io:format("Client ~p is connected~n", [C]),
-	self() ! hello,
-	self() ! ping,
+    self() ! hello,
+    self() ! ping,
     {noreply, State};
 
 %% Client disconnected
@@ -129,7 +129,7 @@ handle_info({mqttc, C,  disconnected}, State = #state{mqttc = C}) ->
     {noreply, State};
 
 handle_info(Info, State) ->
-	io:format("Info: ~p", [Info]),
+    io:format("Info: ~p", [Info]),
     {noreply, State}.
 
 %%--------------------------------------------------------------------
@@ -161,4 +161,4 @@ code_change(_OldVsn, State, _Extra) ->
 %%% Internal functions
 %%%===================================================================
 do_loop(What) ->
-	erlang:send_after(10000, self(), What).
+    erlang:send_after(10000, self(), What).
