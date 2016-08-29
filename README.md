@@ -7,3 +7,7 @@ Build
 -----
 
     $ rebar3 compile
+
+Run
+---
+    $ python start.py
